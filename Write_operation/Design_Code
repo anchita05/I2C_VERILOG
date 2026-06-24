@@ -1,0 +1,72 @@
+module i2c_slave(input clk, input rst, input start,
+                 input [6:0] slave_addr, input [7:0] data_in,
+                 output scl, output reg sda, output reg done);
+    assign scl = clk;
+    parameter IDLE     = 3'd0,
+              START    = 3'd1,
+              ADDRESS  = 3'd2,
+              ACK      = 3'd3,
+              DATA     = 3'd4,
+              DATA_ACK = 3'd6,
+              STOP     = 3'd5;     
+    reg[2:0] state;
+    reg[3:0] bit_cnt;
+    reg[7:0] shift_reg;
+    //Reset Logic
+    always @(negedge clk or posedge rst) begin
+        if(rst)
+        begin
+            state <= IDLE;
+            sda <= 1;
+            done <= 0;
+            shift_reg <= 8'd0;
+            bit_cnt <= 4'd0;
+        end
+        else
+        begin
+            case(state)
+                IDLE : begin
+                    done <= 0;
+                    sda <= 1;
+                    if(start)
+                        state <= START;
+                end
+                START : begin
+                    sda <= 0;
+                    shift_reg <= {slave_addr, 1'b0}; //WRITE OPERATION
+                    bit_cnt <= 7;
+                    state <= ADDRESS;
+                end
+                ADDRESS : begin
+                    sda <= shift_reg[bit_cnt];
+                    if (bit_cnt == 0)
+                        state <= ACK;
+                    else
+                        bit_cnt <= bit_cnt - 1;
+                end
+                ACK : begin
+                    sda <= 0;
+                    shift_reg <= data_in;
+                    bit_cnt <= 7;
+                    state <= DATA;
+                end
+                DATA : begin
+                    sda <= shift_reg[bit_cnt];
+                    if (bit_cnt == 0)
+                        state <= DATA_ACK;
+                    else
+                        bit_cnt <= bit_cnt - 1;
+                end
+                DATA_ACK : begin
+                    sda   <= 0; // Drive/Wait for the data byte ACK phase
+                    state <= STOP;
+                end
+                STOP : begin
+                    sda <= 1;
+                    done <= 1;
+                    state <= IDLE;
+                end
+            endcase
+        end        
+    end      
+endmodule
